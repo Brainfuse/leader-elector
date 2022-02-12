@@ -1,17 +1,17 @@
-FROM registry.ci.openshift.org/ocp/builder:rhel-8-golang-1.16-openshift-4.8 AS builder
+FROM golang:1.16-alpine AS builder
 
 ADD election /go/src/k8s.io/contrib/election
 RUN cd /go/src/k8s.io/contrib/election \
  && CGO_ENABLED=0 GOOS=linux GO111MODULE=off go build -a -installsuffix cgo -ldflags '-w' -o leader-elector example/main.go
 
 # Regular image
-FROM registry.ci.openshift.org/ocp/4.8:base
+FROM debian:jessie
 
 COPY --from=builder /go/src/k8s.io/contrib/election/leader-elector /usr/bin/
 
 USER 1001
 
-ENTRYPOINT [ "leader-elector", "--id=$(hostname)" ]
+ENTRYPOINT [ "leader-elector" ]
 
 LABEL \
         io.k8s.description="This is a component of OpenShift Container Platform and provides a leader-elector sidecar container." \
