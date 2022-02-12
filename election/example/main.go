@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"io"
 	"time"
 
 	election "k8s.io/contrib/election/lib"
@@ -80,9 +81,37 @@ func webHandler(res http.ResponseWriter, req *http.Request) {
 	res.Write(data)
 }
 
+func webHealthHandler(res http.ResponseWriter, _ *http.Request) {
+	if leader == nil || leader.Name == "" {
+		res.WriteHeader(http.StatusInternalServerError)
+		io.WriteString(res, fmt.Sprintf("Invalid leader set: %v", leader))
+		return
+	}
+
+	res.WriteHeader(http.StatusOK)
+	io.WriteString(res, fmt.Sprintf("Valid leader set: %v", leader))
+}
+
+func webLeaderHandler(res http.ResponseWriter, _ *http.Request) {
+	if leader == nil || leader.Name == "" {
+		res.WriteHeader(http.StatusInternalServerError)
+		io.WriteString(res, fmt.Sprintf("Invalid leader set: %v", leader))
+		return
+	}
+	if(leader.Name == *id){
+		res.WriteHeader(http.StatusOK)
+		io.WriteString(res, fmt.Sprintf("Valid leader set: %v", leader))
+		return
+	}
+	res.WriteHeader(http.StatusGone)
+}
+
 func validateFlags() {
 	if len(*id) == 0 {
-		glog.Fatal("--id cannot be empty")
+		*id = os.Getenv("HOSTNAME")
+		if len(*id) == 0 {
+			glog.Fatal("--id cannot be empty")
+		}
 	}
 	if len(*name) == 0 {
 		glog.Fatal("--election cannot be empty")
@@ -110,6 +139,9 @@ func main() {
 	go election.RunElection(e)
 
 	if len(*addr) > 0 {
+		http.HandleFunc("/health", webHealthHandler)
+
+		http.HandleFunc("/leader", webLeaderHandler)
 		http.HandleFunc("/", webHandler)
 		http.ListenAndServe(*addr, nil)
 	} else {
