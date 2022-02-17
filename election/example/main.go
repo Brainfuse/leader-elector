@@ -29,6 +29,7 @@ import (
 	"github.com/golang/glog"
 	flag "github.com/spf13/pflag"
 	"k8s.io/kubernetes/pkg/api"
+	// "k8s.io/kubernetes/pkg/apimachinery/types"
 	"k8s.io/kubernetes/pkg/client/restclient"
 	client "k8s.io/kubernetes/pkg/client/unversioned"
 	kubectl_util "k8s.io/kubernetes/pkg/kubectl/cmd/util"
@@ -48,6 +49,11 @@ var (
 	leader = &LeaderData{}
 )
 
+type patchStringValue struct {
+    Op    string `json:"op"`
+    Path  string `json:"path"`
+    Value string `json:"value"`
+}
 func makeClient() (*client.Client, error) {
 	var cfg *restclient.Config
 	var err error
@@ -128,6 +134,29 @@ func main() {
 	}
 
 	fn := func(str string) {
+		var payload [] patchStringValue
+		
+		if(*id == str){
+			payload = []patchStringValue{{
+				Op:    "add",
+				Path:  "/metadata/labels/leader",
+				Value: "yes",
+			}}
+		} else {
+			payload = []patchStringValue{{
+				Op:    "remove",
+				Path:  "/metadata/labels/leader",
+			}}
+		}
+		// var updateErr error
+		payloadBytes, _ := json.Marshal(payload)
+		_, updateErr := kubeClient.Pods(*namespace).Patch(*id, "application/json-patch+json", payloadBytes)
+		if updateErr == nil {
+			fmt.Println(fmt.Sprintf("Pod %s labelled successfully.", *id))
+		} else {
+			fmt.Println(updateErr)
+		}
+	
 		leader.Name = str
 		fmt.Printf("%s is the leader\n", leader.Name)
 	}

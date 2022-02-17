@@ -37,6 +37,7 @@ type PodInterface interface {
 	Watch(opts api.ListOptions) (watch.Interface, error)
 	Bind(binding *api.Binding) error
 	UpdateStatus(pod *api.Pod) (*api.Pod, error)
+	Patch(name string, pt api.PatchType, data []byte) (result *api.Pod, err error)
 	GetLogs(name string, opts *api.PodLogOptions) *restclient.Request
 }
 
@@ -77,6 +78,19 @@ func (c *pods) Delete(name string, options *api.DeleteOptions) error {
 func (c *pods) Create(pod *api.Pod) (result *api.Pod, err error) {
 	result = &api.Pod{}
 	err = c.r.Post().Namespace(c.ns).Resource("pods").Body(pod).Do().Into(result)
+	return
+}
+
+// Patch applies the patch and returns the patched pod.
+func (c *pods) Patch(name string, pt api.PatchType, data []byte) (result *api.Pod, err error) {
+	result = &api.Pod{}
+	err = c.r.Patch(pt).
+		Namespace(c.ns).
+		Resource("pods").
+		Name(name).
+		Body(data).
+		Do().
+		Into(result)
 	return
 }
 
