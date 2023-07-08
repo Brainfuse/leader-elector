@@ -1,0 +1,5 @@
+{
+    "go.gopath": "/workspaces/leader-elector/election",
+    "go.toolsEnvVars": {"CGO_ENABLED":0, "GO111MODULE": "off"},
+    "go.inferGopath": true
+}

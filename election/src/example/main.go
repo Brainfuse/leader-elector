@@ -19,16 +19,17 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
-	"io"
 	"time"
 
-	election "k8s.io/contrib/election/lib"
+	election "lib"
 
 	"github.com/golang/glog"
 	flag "github.com/spf13/pflag"
 	"k8s.io/kubernetes/pkg/api"
+
 	// "k8s.io/kubernetes/pkg/apimachinery/types"
 	"k8s.io/kubernetes/pkg/client/restclient"
 	client "k8s.io/kubernetes/pkg/client/unversioned"
@@ -50,10 +51,11 @@ var (
 )
 
 type patchStringValue struct {
-    Op    string `json:"op"`
-    Path  string `json:"path"`
-    Value string `json:"value"`
+	Op    string `json:"op"`
+	Path  string `json:"path"`
+	Value string `json:"value"`
 }
+
 func makeClient() (*client.Client, error) {
 	var cfg *restclient.Config
 	var err error
@@ -104,7 +106,7 @@ func webLeaderHandler(res http.ResponseWriter, _ *http.Request) {
 		io.WriteString(res, fmt.Sprintf("Invalid leader set: %v", leader))
 		return
 	}
-	if(leader.Name == *id){
+	if leader.Name == *id {
 		res.WriteHeader(http.StatusOK)
 		io.WriteString(res, fmt.Sprintf("Valid leader set: %v", leader))
 		return
@@ -134,9 +136,9 @@ func main() {
 	}
 
 	fn := func(str string) {
-		var payload [] patchStringValue
-		
-		if(*id == str){
+		var payload []patchStringValue
+
+		if *id == str {
 			payload = []patchStringValue{{
 				Op:    "add",
 				Path:  "/metadata/labels/leader",
@@ -144,8 +146,8 @@ func main() {
 			}}
 		} else {
 			payload = []patchStringValue{{
-				Op:    "remove",
-				Path:  "/metadata/labels/leader",
+				Op:   "remove",
+				Path: "/metadata/labels/leader",
 			}}
 		}
 		// var updateErr error
@@ -156,7 +158,7 @@ func main() {
 		} else {
 			fmt.Println(updateErr)
 		}
-	
+
 		leader.Name = str
 		fmt.Printf("%s is the leader\n", leader.Name)
 	}
