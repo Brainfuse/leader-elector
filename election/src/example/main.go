@@ -24,7 +24,7 @@ import (
 	"os"
 	"time"
 
-	election "lib"
+	election "k8s.io/contrib/election"
 
 	"github.com/golang/glog"
 	flag "github.com/spf13/pflag"
