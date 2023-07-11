@@ -1,0 +1,78 @@
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: leader-election
+  labels:
+    leader-election: required
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: leader-election
+  labels:
+    leader-election: required
+rules:
+  - apiGroups: [""]
+    resources: ["endpoints", "pods"]
+    verbs: ["*"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: leader-election
+  labels:
+    leader-election: required
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: leader-election
+subjects:
+  - name: leader-election
+    namespace: default
+    kind: ServiceAccount
+---
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: leader-test
+spec:
+  selector:
+    matchLabels:
+      app: leader-test # has to match .spec.template.metadata.labels
+  replicas: 2 # by default is 1
+  template:
+    metadata:
+      labels:
+        app: leader-test
+        leader-election: required
+    spec:
+      terminationGracePeriodSeconds: 10
+      serviceAccountName: leader-election
+        
+      # initContainers:
+      # - name: init-quartz
+      #   image: busybox:1.28
+      #   command: ['sh', "/readonly/quartz/init.sh"]
+      #   volumeMounts:
+      #     - name: quartz-cfg
+      #       mountPath: "/readonly/quartz"
+      #       readOnly: true
+          
+      containers:
+      - name: leader-elector
+        image: docker.dev.brainfuse.com/leader-elector:1.0 
+        args:
+        - --election=quartz-web
+        - --http=0.0.0.0:4040
+        - --id=
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 4040
+        readinessProbe:
+            httpGet:
+              path: /
+              port: 4040
+            initialDelaySeconds: 5
+            periodSeconds: 1
