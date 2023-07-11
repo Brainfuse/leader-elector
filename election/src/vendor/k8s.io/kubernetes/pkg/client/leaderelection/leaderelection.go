@@ -291,7 +291,7 @@ func (le *LeaderElector) tryAcquireOrRenew() bool {
 			le.observedRecord = oldLeaderElectionRecord
 			le.observedTime = time.Now()
 		}
-		if le.observedTime.Add(le.config.LeaseDuration).After(now.Time) &&
+		if le.observedTime.Add(time.Second*time.Duration(oldLeaderElectionRecord.LeaseDurationSeconds)).After(now.Time) &&
 			oldLeaderElectionRecord.HolderIdentity != le.config.Identity {
 			glog.Infof("lock is held by %v and has not yet expired", oldLeaderElectionRecord.HolderIdentity)
 			return false
@@ -321,6 +321,36 @@ func (le *LeaderElector) tryAcquireOrRenew() bool {
 	le.observedRecord = leaderElectionRecord
 	le.observedTime = time.Now()
 	return true
+}
+
+func (le *LeaderElector) Release() {
+	if !le.IsLeader() {
+		return
+	}
+	now := unversioned.Now()
+	leaderElectionRecord := LeaderElectionRecord{
+		HolderIdentity:       le.config.Identity,
+		LeaseDurationSeconds: 1,
+		RenewTime:            now,
+		AcquireTime:          now,
+	}
+
+	e, err := le.config.Client.Endpoints(le.config.EndpointsMeta.Namespace).Get(le.config.EndpointsMeta.Name)
+	if err == nil {
+		return
+	}
+	leaderElectionRecordBytes, err := json.Marshal(leaderElectionRecord)
+	if err != nil {
+		glog.Errorf("err marshaling leader election record: %v", err)
+		return
+	}
+	e.Annotations[LeaderElectionRecordAnnotationKey] = string(leaderElectionRecordBytes)
+
+	_, err = le.config.Client.Endpoints(le.config.EndpointsMeta.Namespace).Update(e)
+	if err != nil {
+		glog.Errorf("err: %v", err)
+		return
+	}
 }
 
 func (l *LeaderElector) maybeReportTransition() {

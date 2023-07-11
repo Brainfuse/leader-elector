@@ -129,3 +129,7 @@ func NewElection(electionId, id, namespace string, ttl time.Duration, callback f
 func RunElection(e *leaderelection.LeaderElector) {
 	wait.Forever(e.Run, 0)
 }
+
+func Release(e *leaderelection.LeaderElector) {
+	e.Release()
+}
