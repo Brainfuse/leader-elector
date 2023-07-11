@@ -17,11 +17,15 @@ limitations under the License.
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	election "k8s.io/contrib/election"
@@ -46,8 +50,8 @@ var (
 	ttl       = flags.Duration("ttl", 10*time.Second, "The TTL for this election")
 	inCluster = flags.Bool("use-cluster-credentials", false, "Should this request use cluster credentials?")
 	addr      = flags.String("http", "", "If non-empty, stand up a simple webserver that reports the leader state")
-
-	leader = &LeaderData{}
+	webHook   = flags.String("webHook", "", "End point to call when the leader changes. Called with parameter status=LEADING|STOPPED|OTHERLEADER and leader parameter")
+	leader    = &LeaderData{}
 )
 
 type patchStringValue struct {
@@ -135,20 +139,25 @@ func main() {
 		glog.Fatalf("error connecting to the client: %v", err)
 	}
 
+	done := make(chan os.Signal, 1)
+	signal.Notify(done, os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
+
 	fn := func(str string) {
 		var payload []patchStringValue
-
+		var status string
 		if *id == str {
 			payload = []patchStringValue{{
 				Op:    "add",
 				Path:  "/metadata/labels/leader",
 				Value: "yes",
 			}}
+			status = "LEADING"
 		} else {
 			payload = []patchStringValue{{
 				Op:   "remove",
 				Path: "/metadata/labels/leader",
 			}}
+			status = "LEADER"
 		}
 		// var updateErr error
 		payloadBytes, _ := json.Marshal(payload)
@@ -157,6 +166,14 @@ func main() {
 			fmt.Println(fmt.Sprintf("Pod %s labelled successfully.", *id))
 		} else {
 			fmt.Println(updateErr)
+		}
+
+		if len(*webHook) > 0 {
+			resp, err := http.Get(*webHook + "?status=" + status + "&leader=" + str)
+			if err != nil {
+				fmt.Printf("Error calling webhook %s.", resp.Status)
+			}
+			defer resp.Body.Close()
 		}
 
 		leader.Name = str
@@ -168,14 +185,40 @@ func main() {
 		glog.Fatalf("failed to create election: %v", err)
 	}
 	go election.RunElection(e)
-
+	var srv *http.Server
 	if len(*addr) > 0 {
-		http.HandleFunc("/health", webHealthHandler)
+		router := http.NewServeMux()
+		router.HandleFunc("/health", webHealthHandler)
 
-		http.HandleFunc("/leader", webLeaderHandler)
-		http.HandleFunc("/", webHandler)
-		http.ListenAndServe(*addr, nil)
-	} else {
-		select {}
+		router.HandleFunc("/leader", webLeaderHandler)
+		router.HandleFunc("/", webHandler)
+		srv := &http.Server{
+			Addr: *addr, Handler: router,
+		}
+
+		go func() {
+			if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+				fmt.Printf("listen: %s\n", err)
+			}
+		}()
+
 	}
+	<-done
+	fmt.Print("Server Stopped")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer func() {
+		// extra handling here
+		// Remove the leader label from the pod
+		fn("")
+		e.Release()
+		cancel()
+	}()
+	if srv != nil {
+
+		if err := srv.Shutdown(ctx); err != nil {
+			log.Fatalf("Server Shutdown Failed:%+v", err)
+		}
+	}
+	log.Print("Server Exited Properly")
 }
