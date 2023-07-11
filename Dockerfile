@@ -1,13 +1,13 @@
 FROM golang:1.16-alpine AS builder
 
-ADD election/src /go/src/k8s.io/contrib/election
-RUN cd /go/src/k8s.io/contrib/election \
+ADD election/src /go/src
+RUN cd /go/src \
  && CGO_ENABLED=0 GOOS=linux GO111MODULE=off go build -a -installsuffix cgo -ldflags '-w' -o leader-elector example/main.go
 
 # Regular image
 FROM debian:jessie
 
-COPY --from=builder /go/src/k8s.io/contrib/election/leader-elector /usr/bin/
+COPY --from=builder /go/src/leader-elector /usr/bin/
 
 USER 1001
 
